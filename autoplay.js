@@ -271,12 +271,27 @@
   }
 
   // --------------------------------------------------------------- the play loop
+  // 终局规则（远山 2026-10-14 定）：大龙（关底 BOSS 10303）一出场就不再满地图逃——
+  // 先追着打完别的敌人，场上只剩大龙时直接去决战（见 v12-loop.js 的 end boss 段）。
+  // 地址后面加 ?boss=0 关掉这条，回到老的「危险就一直逃」。
+  var BOSS_RULE = !/(^|[?&])boss=0(&|$)/.test(location.search);
+  S.bossRule = BOSS_RULE;
+  // 清场时限的两个旋钮（都有默认值，见 v12-loop.js）：?bossIdle=秒 追多久打不到就转决战；
+  // ?bossMax=秒 清场最多持续多久。想现场试手感就改链接，不用改代码。
+  function numParam(name) {
+    var m = new RegExp('[?&]' + name + '=([0-9]+(?:\\.[0-9]+)?)').exec(location.search);
+    return m ? Number(m[1]) : undefined;
+  }
+  S.bossIdleMax = numParam('bossIdle');
+  S.bossClearMax = numParam('bossMax');
+
   var loopS = null;
   function startLoop() {
     if (!window.ZD12LOOP) { log('no ZD12LOOP'); return false; }
     try {
       if (loopS && loopS.stop) loopS.stop();
-      loopS = window.ZD12LOOP.start({ period: 66 });
+      loopS = window.ZD12LOOP.start({ period: 66, bossRule: BOSS_RULE,
+        bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax });
       log('loop started');
       return true;
     } catch (e) { S.err = 'loop:' + e; log('loop ERR ' + e); return false; }

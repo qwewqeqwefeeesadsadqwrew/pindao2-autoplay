@@ -150,6 +150,7 @@
     for (i = 0; i < world.foes.length; i++) {
       var f = world.foes[i];
       if (f.dead) continue;
+      if (opt.skipBoss && isBoss(f, opt)) continue;        // 清场阶段：BOSS 不算猎物
       if (E.heroCnt(f) > E.heroCnt(me)) continue;          // 刀比我们多的：不碰
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       if (wantFinish && freeKill(world, f, cap, finishSafe)) {
@@ -159,14 +160,19 @@
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
         if (need * (opt.huntMargin || 1.3) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
-        var alone = true;                                  // 落单：旁边没有别的敌人
-        for (j = 0; j < world.foes.length; j++) {
-          if (j === i || world.foes[j].dead) continue;
-          var g = world.foes[j];
-          var gd = Math.sqrt((g.x - f.x) * (g.x - f.x) + (g.y - f.y) * (g.y - f.y));
-          if (gd < (opt.aloneRange || 520)) { alone = false; break; }
+        // 落单要求：旁边不能有别的敌人。`aloneRange` 给 0 或负数 = 关掉这条
+        // （清场阶段用：场上就剩几个了，旁边有谁也得上去打）。
+        var aloneR = opt.aloneRange !== undefined ? opt.aloneRange : 520;
+        if (aloneR > 0) {
+          var alone = true;
+          for (j = 0; j < world.foes.length; j++) {
+            if (j === i || world.foes[j].dead) continue;
+            var g = world.foes[j];
+            var gd = Math.sqrt((g.x - f.x) * (g.x - f.x) + (g.y - f.y) * (g.y - f.y));
+            if (gd < aloneR) { alone = false; break; }
+          }
+          if (!alone) continue;
         }
-        if (!alone) continue;
       }
       if (!best || d < best.d) best = { x: f.x, y: f.y, d: d, id: f.id, blades: E.heroCnt(f) };
     }
@@ -297,10 +303,12 @@
   //  * Commitment: once we have picked a destination, keep steering at it for a moment.
   //    A policy that re-picks from scratch every tick will happily oscillate between two
   //    good ideas and travel nowhere.
-  var _state = { t: -1e9, panic: false, tgt: null, mode: '', until: -1e9 };
+  var _state = { t: -1e9, panic: false, tgt: null, mode: '', until: -1e9,
+    bossIn: false, bossAt: 0, bossKillAt: 0, bossDie: -1 };
   function rewind(world) {
     if (!(world.t > _state.t)) {
       _state.panic = false; _state.tgt = null; _state.mode = ''; _state.until = -1e9;
+      _state.bossIn = false; _state.bossAt = 0; _state.bossKillAt = 0; _state.bossDie = -1;
     }
     _state.t = world.t;
   }
@@ -419,6 +427,49 @@
     return best;
   }
 
+  // ---------------------------------------------------------------- end boss（终局规则）
+  // 第 3 关的关底 BOSS = 10303：数据里 `is_boss:1`，全关唯一的「攻击 3」刀环、150 把刀、
+  // 移速 300、agent 3 只追主角（见 `07-BOSS账与沙盘对齐-20261013.md`）。识别以数据表打头、
+  // 攻击力兜底——这一关别处没有 atk 3。
+  //
+  // 远山 2026-10-14 定的终局：BOSS 一出场就**不再满地图逃**，改成两段——
+  //   ① 清场：优先追杀除 BOSS 外的敌人（闸门放开：全图、旁边有别人也照打）；
+  //   ② 决战：场上只剩 BOSS 时，径直贴上去对拼。
+  // 一句实话写进代码：这个 BOSS 是设计上打不过的（我们 atk 1 / 它 atk 3；刀数拉满 400 把也只能
+  // 磨掉它约三分之一，见 07 文档第三节）。所以「决战」的结果基本是主角阵亡——这是远山要的节目
+  // 效果，不是策略出错。地址后面加 `?boss=0` 关掉这条规则，回到老的「一直逃」。
+  function isBoss(f, opt) {
+    if (!f || f.dead) return false;
+    var id = opt && opt.bossId !== undefined ? opt.bossId : 10303;
+    if (Number(f.id) === Number(id)) return true;
+    var t = D && D.HERO && D.HERO[f.id];
+    if (t && t.is_boss) return true;
+    return E.bladeAtk(f) >= (opt && opt.bossAtk !== undefined ? opt.bossAtk : 3);
+  }
+  function bossFoe(world, opt) {
+    for (var i = 0; i < world.foes.length; i++) if (isBoss(world.foes[i], opt)) return world.foes[i];
+    return null;
+  }
+  // 除 BOSS 外还活着的敌人：这就是「清场」要打完的名单。
+  function otherFoes(world, opt) {
+    var out = [];
+    for (var i = 0; i < world.foes.length; i++) {
+      var f = world.foes[i];
+      if (f.dead || isBoss(f, opt)) continue;
+      out.push(f);
+    }
+    return out;
+  }
+  function nearestOf(me, list) {
+    var best = null, bd = 0;
+    for (var i = 0; i < list.length; i++) {
+      var f = list[i];
+      var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
+      if (!best || d < bd) { best = { x: f.x, y: f.y, d: d, id: f.id, blades: E.heroCnt(f) }; bd = d; }
+    }
+    return best;
+  }
+
   function decide(world, opt) {
     opt = opt || {};
     rewind(world);
@@ -445,8 +496,75 @@
     var standoff = opt.standoff || 6000;
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
+    // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
+    // `?boss=0` / `opt.bossRule === false` 关掉，走下面原来那套（危险就跑）。
+    var bossF = opt.bossRule === false ? null : bossFoe(world, opt);
+    var bossPhase = bossF ? (otherFoes(world, opt).length ? 'clear' : 'duel') : null;
+    // 清场阶段还有个「时限」，理由是真机实测出来的（2026-10-14，见 10 号文档第四节）：
+    // 剩下的敌人跟我们同速，它一路跑我们永远追不上——真机上主角追着 10302 跑了 60 多秒，
+    // 距离一直卡在 1000 像素、一个都没打死，画面上就是「还在满地图跑」。
+    // 所以清场给两条线：① 大龙出场后最长 bossClearMax 秒；② 连续 bossIdleMax 秒没有任何人死
+    // （`dieHeroCnt` 不动＝我们追的这一只没吃到），谁先到就转决战。
+    var bossTag = bossPhase;
     if (mode === 'unstick') {
       // escape only -- no loot detour while we are pinned
+    } else if (bossPhase === 'clear') {
+      // 先打完别的敌人。闸门放开：旁边有别人也照打、空壳也收、不要求换刀数学占优。
+      // 这一段的猎物里**不含 BOSS**（skipBoss），否则它会一直被当成最近的目标。
+      //
+      // 但有一条硬约束：**不许背对着大龙跑**。大龙 300 移速、我们 255，直线跑必被追上；
+      // 沙盘里第一版就是栽在这——去追 1600~4800 像素外的敌人，大龙挂着我们，15 秒把刀圈
+      // 从 103 磨到 0（seed 7，rt 180 -> 204.8）。所以「清场」只在**够得着的半径**里成立：
+      // 半径 = min(clearLeash, 到大龙的距离 + clearSlack)，大龙越近、能追的范围越小；
+      // 半径里没有别的敌人就直接进决战。这样「打得到的别人先打、打不到就打大龙」。
+      var bossD = Math.sqrt((bossF.x - me.x) * (bossF.x - me.x) + (bossF.y - me.y) * (bossF.y - me.y));
+      var maxChase = Math.min(opt.clearLeash !== undefined ? opt.clearLeash : 1800,
+        bossD + (opt.clearSlack !== undefined ? opt.clearSlack : 600));
+      if (!_state.bossIn) {
+        _state.bossIn = true; _state.bossAt = world.t;
+        _state.bossKillAt = world.t; _state.bossDie = world.dieHeroCnt || 0;
+      }
+      if ((world.dieHeroCnt || 0) > _state.bossDie) {
+        _state.bossDie = world.dieHeroCnt; _state.bossKillAt = world.t;
+      }
+      var overTime = world.t - _state.bossAt >= (opt.bossClearMax !== undefined ? opt.bossClearMax : 18);
+      var overIdle = world.t - _state.bossKillAt >= (opt.bossIdleMax !== undefined ? opt.bossIdleMax : 8);
+      if (overTime || overIdle) {
+        tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+        mode = 'boss->duel';
+        bossTag = overTime ? 'clear-timeout' : 'clear-idle';
+      } else {
+        var bopt = {};
+        for (var bk in opt) if (opt.hasOwnProperty(bk)) bopt[bk] = opt[bk];
+        bopt.huntRange = maxChase;
+        bopt.aloneRange = 0;
+        bopt.finishRange = maxChase;
+        bopt.skipBoss = true;
+        tgt = pickTarget(world, bopt);
+        mode = tgt ? 'boss->clear' : 'farm';
+        if (!tgt) {
+          // 换刀数学不占优（剩下的敌人比我们强）时，远山要的是「追着打」——但只追
+          // **刀不比我们多** 且在半径内的那些，半径外/比我们强的直接打大龙。
+          var pick = [], oth = otherFoes(world, opt), myCnt = E.heroCnt(me);
+          for (var oi = 0; oi < oth.length; oi++) {
+            var of = oth[oi];
+            if (E.heroCnt(of) > myCnt) continue;
+            var od = Math.sqrt((of.x - me.x) * (of.x - me.x) + (of.y - me.y) * (of.y - me.y));
+            if (od <= maxChase) pick.push(of);
+          }
+          tgt = nearestOf(me, pick);
+          if (tgt) mode = 'boss->clear';
+        }
+        if (!tgt) {
+          // 半径里没有别的敌人（清光了，或者都太远/太强）：直接进决战。
+          tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+          mode = 'boss->duel';
+        }
+      }
+    } else if (bossPhase === 'duel') {
+      // 场上只剩我们和大龙：不逃了，直接贴上去。
+      tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+      mode = 'boss->duel';
     } else if (dom && (dom.d < standoff || (panic && dom.d < standoffOut))) {
       // gather every threat, not just the nearest -- one is enough to be cornered by
       var all = [], i, f;
@@ -504,7 +622,11 @@
       var dropS = opt.commitDrop || 600;
       var ddx = _state.tgt ? tgt.x - _state.tgt.x : 0, ddy = _state.tgt ? tgt.y - _state.tgt.y : 0;
       var sameIdea = _state.tgt && (ddx * ddx + ddy * ddy) < dropS * dropS;
-      var urgent = (mode === 'unstick') || (dom && dom.d < (opt.urgentD || 900));
+      // 「换策略」那一拍必须立刻生效（远山要的是「立马」）：进入 BOSS 阶段的第一拍
+      // 不走「保持上一拍目标」的惯性，免得头 1 秒还在朝着原来的逃跑方向走。
+      var wasBossMode = !!_state.mode && _state.mode.indexOf('boss->') === 0;
+      var urgent = bossPhase ? !wasBossMode
+        : ((mode === 'unstick') || (dom && dom.d < (opt.urgentD || 900)));
       if (_state.tgt && mode !== 'unstick' && world.t < _state.until && !urgent && !sameIdea) {
         tgt = _state.tgt; mode = _state.mode;
       } else {
@@ -523,6 +645,10 @@
     }
     if (mode === 'flee+loot') huntW = 20;
     if (mode === 'flee+kill') huntW = 20;   // same licence as the loot detour
+    // 清场/决战：目标就是「过去打」，给足权重，别再为路边的掉落磨蹭
+    // （HP 是硬约束，见引擎 plan 的 r.hard，所以加这个不会让主角去送死）。
+    if (mode === 'boss->clear' || mode === 'boss->clear+loot') huntW = opt.bossClearW || 22;
+    if (mode === 'boss->duel' || mode === 'boss->duel+loot') huntW = opt.bossDuelW || 28;
     // Border safety scales with the danger around us. With nothing strong nearby the
     // border is harmless and the props sitting near it are still worth taking; with a
     // bigger ring closing in, being pinned against a wall is how runs end.
@@ -530,6 +656,15 @@
     if (opt.weights) for (var wk in opt.weights) if (opt.weights.hasOwnProperty(wk)) wts[wk] = opt.weights[wk];
     if (wts.hunt === undefined) wts.hunt = huntW;
     if (wts.edge === undefined) wts.edge = dom ? 42 : 8;
+    // 决战要「真打」：把「掉刀血」「拼一刀的节奏」这两项的记分关掉。
+    // 引擎原来的账本里丢 1 点刀血 = -1000 分、拼一次 = -400 分，而靠近大龙每 1 像素才 +28 分，
+    // 于是主角永远是「绕着大龙转圈、蹭两下就退」——真机实测 dBoss 卡在 400~700 转了 40 多秒
+    // （2026-10-14 r2 局）。远山要的是贴上去打，所以这里改成只认「靠近目标」和「削对方刀血」。
+    // HP 仍然是引擎里的硬约束（r.hard），不会为了打大龙去送人头。
+    if (mode === 'boss->duel' || mode === 'boss->duel+loot') {
+      if (wts.bladeHp === undefined) wts.bladeHp = opt.bossDuelBladeHp !== undefined ? opt.bossDuelBladeHp : 0;
+      if (wts.clash === undefined) wts.clash = opt.bossDuelClash !== undefined ? opt.bossDuelClash : 0;
+    }
     var edgePad = opt.edgePad !== undefined ? opt.edgePad : (dom ? 760 : 420);
     var res = E.plan(world, {
       ndir: opt.ndir || 24,
@@ -543,6 +678,7 @@
       edgePad: edgePad
     });
     return { best: res.best, target: tgt, ms: nowMs() - t0, mode: mode,
+      boss: bossTag, nOther: bossPhase ? otherFoes(world, opt).length : null,
       threat: dom ? { id: dom.h.id, d: Math.round(dom.d), blades: E.heroCnt(dom.h), atk: dom.atk } : null };
   }
 
@@ -557,6 +693,7 @@
       ticks: 0, ok: 0, miss: 0, err: null, lastMs: 0, maxMs: 0, sumMs: 0,
       mode: 'farm', target: null, blades: 0, hp: 0, runTime: 0, die: 0, nFoe: 0,
       cmd: [0, 0], t0: nowMs(), trace: [], stopped: false, dead: false, deadAt: null, threat: null,
+      boss: null,
       hpMin: 99, bladeHist: []
     };
     function note(x) { S.trace.push(x); if (S.trace.length > 400) S.trace.shift(); }
@@ -580,6 +717,7 @@
         S.cmd = [Math.round(ux * 100) / 100, Math.round(uy * 100) / 100];
         S.mode = d.mode; S.target = d.target;
         S.threat = d.threat;
+        S.boss = d.boss; S.nOther = d.nOther;
         S.lastMs = Math.round(d.ms); S.sumMs += d.ms; if (d.ms > S.maxMs) S.maxMs = d.ms;
         S.ticks++;
         var m = s.meta;
@@ -602,6 +740,7 @@
         mode: S.mode, target: S.target, blades: S.blades, hp: S.hp, hpMin: S.hpMin,
         runTime: Math.round(S.runTime * 100) / 100, die: S.die, nFoe: S.nFoe, cmd: S.cmd,
         threat: S.threat,
+        boss: S.boss, nOther: S.nOther,
         dt: Math.round((nowMs() - S.t0) / 1000), planMsAvg: S.ticks ? Math.round(S.sumMs / S.ticks) : 0,
         planMsMax: Math.round(S.maxMs), hist: S.bladeHist
       };
@@ -616,6 +755,7 @@
     VERSION: 'v12-loop',
     start: start, decide: decide, pickTarget: pickTarget, pickWaypoint: pickWaypoint, propValue: propValue,
     nearestThreat: nearestThreat,
+    isBoss: isBoss, bossFoe: bossFoe, otherFoes: otherFoes,
     liveSense: liveSense, liveAct: liveAct, heroState: heroState,
     monState: monState, propState: propState
   };
