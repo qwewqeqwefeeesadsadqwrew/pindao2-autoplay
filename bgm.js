@@ -52,10 +52,14 @@
         p.__bgmPatched = true;
       }
     } catch (e) { B.err = 'patch: ' + e; }
+    // 分开两段 try：stopMusic 内部偶尔会自己抛错（播放器还没建好），
+    // 不能因为这个把「把音量钉 0」也一起跳过。
     try {
-      if (typeof A.stopMusic === 'function') A.stopMusic();
-      if (A.music && A.music.volume) A.music.volume = 0;
+      if (A.music && typeof A.stopMusic === 'function') A.stopMusic();
     } catch (e) { B.err = 'stop: ' + e; }
+    try {
+      if (A.music && A.music.volume) A.music.volume = 0;
+    } catch (e) { B.err = 'vol: ' + e; }
     B.muted = true;
     return true;
   }
