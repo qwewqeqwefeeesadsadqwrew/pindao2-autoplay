@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>拼刀2 · 自动玩（第三关）</title>
+
+<!--
+  交付壳：只放自己的代码。
+  游戏本体（引擎 / 脚本 / 素材）全部从官方 CDN 现拉，一个字都不改；
+  本目录里放的是自动玩本身（v12-data / v12-engine / v12-loop / autoplay.js）。
+  换游戏要改三处：CDN 常量、启动脚本名、autoplay.js 里的入口坐标。
+-->
+<meta name="viewport" content="width=device-width,user-scalable=no,initial-scale=1,minimum-scale=1,maximum-scale=1,minimal-ui=true">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<meta name="renderer" content="webkit">
+<meta name="force-rendering" content="webkit">
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta name="msapplication-tap-highlight" content="no">
+<meta name="full-screen" content="yes">
+<meta name="x5-fullscreen" content="true">
+<meta name="360-fullscreen" content="true">
+<meta name="x5-page-mode" content="app">
+
+<style>html,body{margin:0;padding:0;overflow:hidden;background:#000;width:100%;height:100%}</style>
+
+<script>
+  // 官方 CDN 根（结尾必须有斜杠）。游戏的一切资源都从这里取，跨域是放开的。
+  window.__CDN = 'https://file.gugudang.com/res/down/public/p_kapibala/web-mobile/jiangshiliangle/';
+  // 本页自己的目录（我们自己的代码从这里取，和官方 CDN 分开）
+  window.__HERE = location.origin + location.pathname.replace(/[^\/]*$/, '');
+</script>
+
+<!-- 基准地址：页面里所有「相对路径」都按官方 CDN 解析。
+     官方 index.html 里这些路径本来就是相对它自己目录的，这样写等价；
+     否则游戏去拉 src/settings.json 会打到我们自己的目录上（404，卡开机）。
+     我们自己的脚本用 __HERE 绝对地址注入，不受这条影响。 -->
+<base href="https://file.gugudang.com/res/down/public/p_kapibala/web-mobile/jiangshiliangle/">
+<link rel="stylesheet" type="text/css" href="style.f76d1.css">
+</head>
+<body>
+  <div id="GameDiv" cc_exact_fit_screen="true">
+    <div id="Cocos3dGameContainer">
+      <canvas id="GameCanvas" oncontextmenu="event.preventDefault()" tabindex="99"></canvas>
+    </div>
+  </div>
+
+<!-- 官方启动链（相对路径 -> 上面那条 base -> 官方 CDN；与官方 index.html 逐字一致） -->
+<script src="src/polyfills.bundle.5adbf.js" charset="utf-8"></script>
+<script src="src/system.bundle.543e6.js" charset="utf-8"></script>
+<script src="src/import-map.7e54d.json" type="systemjs-importmap" charset="utf-8"></script>
+<script>
+  // 官方页面里就是这两行：__GM=1 让副玩法不进广告门（官方自己交付时也开着）
+  window['__GM'] = 1;
+  window['__VERSION'] = 'jiangshiliangle';
+  // 官方这里会先补一个 ?t= 时间戳再跳转，那会导致我们这页被刷掉一次；本壳不补。
+  System.import('./index.2dd22.js').catch(function (err) { console.error(err); });
+</script>
+
+<!-- 自动玩（我们自己的代码，从本页目录取）。顺序不能变：数据 -> 引擎 -> 判断层 -> 驱动 -->
+<script>
+  (function () {
+    var files = ['v12-data.js', 'v12-engine.js', 'v12-loop.js', 'autoplay.js'];
+    (function next(i) {
+      if (i >= files.length) return;
+      var s = document.createElement('script');
+      s.src = window.__HERE + files[i];
+      s.charset = 'utf-8';
+      s.onload = function () { next(i + 1); };
+      s.onerror = function () { console.error('autoplay asset failed: ' + files[i]); };
+      document.body.appendChild(s);
+    })(0);
+  })();
+</script>
+</body>
+</html>
