@@ -6,11 +6,13 @@
 //   3. 在关卡列表：没解锁就点「提前解锁」直到计数满，再点「开始」；
 //   4. 进关后交给判断层（v12-loop）自己打；
 //   5. 结算面板一出现（挑战失败/成功）就按「再次挑战」，立刻接着打这一关——无限循环。
+//   6. 每开一局之前，把主角的脸换成「敌人图鉴」里的一个形象（外观补丁，见下）。
 //
 // 怎么点的：
 //   - 菜单是 FairyGUI：调按钮对象自己的 fireClick()（引擎替你按一下）；
 //   - 结算面板是 Cocos 节点：对按钮节点 emit('click')（和引擎自己派发点击同一条路）。
 //   游戏本体一个字节都不改。
+
 (function () {
   'use strict';
 
@@ -35,6 +37,142 @@
       var rt = c._runTimeData || {};
       return !!(rt.mainHero || (c._roleMgr && c._roleMgr._mainHero));
     } catch (e) { return false; }
+  }
+
+  // ------------------------------------------------ 外观补丁：每局把主角换成敌人的形象
+  // 主角长什么样由配置表 ZdHeroConfig[id].res 决定（"1"卡皮巴拉 "12"唐僧 "13"猪八戒 …），
+  // HeroCmp 拿它去取 prefab/hero/<res>。我们只在本页内存里改这一格，而且在「开打之前」改，
+  // 所以新一局的模型一出生就是新形象。游戏磁盘文件一个字节不动；刷新页面即恢复原样。
+  //
+  // SKIN_LIST = 花名册（远山 2026-10-13 挑的 6 个）。每局开打前从里面随机抽一个，
+  // 洗牌式：把花名册打乱当牌堆，一个一个抽，6 张抽完再洗一遍——一轮里不会连着出同一个人。
+  var SKIN_LIST = ['BOSS_02', 'BOSS_03', 'BOSS_04', '51', '48', '13'];
+  // 这 6 个是谁：BOSS_02 青龙 / BOSS_03 大猩猩 / BOSS_04 哥斯拉 / 51 熊猫 / 48 吕布 / 13 猪八戒
+  // 想换人只改上面这一行；全部 79 个编号+名字见 _skill-out\形象节目单.png、probe\names.json。
+  // 常用编号：1 卡皮巴拉(主角原皮) 11 悟空 12 唐僧 13 猪八戒 14 关羽 18 哪吒 24 牛魔王 38 包租婆
+  //          40 奶龙 46 九尾狐 47 貂蝉 48 吕布 49 马斯克 51 熊猫 58 东方不败 BOSS_01~04 关底BOSS
+  // 网址后面加 ?skin=0 关掉整件事；?skin=12,13,11 只演这几个（一样是洗牌随机）。
+  var _heroCfg = null;
+  function heroCfgJson() {
+    if (_heroCfg) return _heroCfg;
+    try {
+      cc.assetManager.assets.forEach(function (a) {
+        var n = String((a && (a.name || a._name)) || '');
+        if (n === 'ZdHeroConfig' && a.json) _heroCfg = a.json;
+      });
+    } catch (e) { }
+    return _heroCfg;
+  }
+  function playerIds(cfg) {                       // agent===0 的就是「主角」，不写死编号
+    var ids = [];
+    for (var k in cfg) { var e = cfg[k]; if (e && Number(e.agent) === 0) ids.push(k); }
+    return ids;
+  }
+  var SKIN = { list: [], i: -1, bag: [], want: null, applied: null, at: 0, fails: 0, seen: null,
+               node: null, checked: false, staged: false };
+  var SKIN_KEY = 'zd12SkinI';      // 一共抽了几张，记在会话里（验收脚本看这个）
+  var SKIN_BAG = 'zd12SkinBag';    // 手上还剩的牌，记在会话里：整页重载接着往下抽，不重头洗
+  (function skinSetup() {
+    SKIN.list = SKIN_LIST.slice();
+    var q = /(^|[?&])skin=([^&]*)/.exec(location.search);
+    if (q) {
+      if (q[2] === '0') SKIN.list = [];                               // ?skin=0 关掉整件事
+      else if (q[2]) SKIN.list = q[2].split(',').filter(Boolean);      // ?skin=12,13 只演这几个
+    }
+    // 花名册只认代码这一行和地址参数：不再读会话里那份旧名单，免得老配置把新名单顶掉
+    try { var b = sessionStorage.getItem(SKIN_BAG); if (b) SKIN.bag = b.split(',').filter(Boolean); } catch (e) { }
+    try { var s = sessionStorage.getItem(SKIN_KEY); if (s !== null && s !== '') SKIN.i = +s; } catch (e) { }
+    S.SKIN = SKIN;                     // 挂到 __AP 上，方便外面看（验收脚本用）
+  })();
+  function skinShuffle(a) {                    // 洗牌
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  // 抽下一张脸：牌堆空了就重洗；手上的牌跟当前花名册对不上（改了名单或换了 ?skin=）也重洗。
+  function skinNext() {
+    if (!SKIN.list.length) return null;
+    var stale = false;
+    for (var k = 0; k < SKIN.bag.length; k++) { if (SKIN.list.indexOf(SKIN.bag[k]) < 0) stale = true; }
+    if (!SKIN.bag.length || stale) SKIN.bag = skinShuffle(SKIN.list.slice());
+    var res = SKIN.bag.shift();
+    SKIN.i++;
+    try {
+      sessionStorage.setItem(SKIN_BAG, SKIN.bag.join(','));
+      sessionStorage.setItem(SKIN_KEY, String(SKIN.i));
+    } catch (e) { }
+    return res;
+  }
+  // 开打之前换脸：抽下一张，写进配置表。一整局只做一次。
+  function skinStage() {
+    if (SKIN.staged) return true;
+    SKIN.staged = true;
+    SKIN.want = skinNext();
+    SKIN.checked = false;
+    if (!skinApply(SKIN.want)) log('skin: config not ready (' + SKIN.want + ')');
+    return true;
+  }
+  // 必须在「开打之前」调：改好配置表，下一局的模型才会是新形象。返回 true = 改好了。
+  function skinApply(res) {
+    if (!res) return true;
+    var cfg = heroCfgJson();
+    if (!cfg) { SKIN.fails++; return false; }
+    var ids = playerIds(cfg);
+    if (!ids.length) { SKIN.fails++; return false; }
+    for (var i = 0; i < ids.length; i++) cfg[ids[i]].res = String(res);
+    SKIN.applied = String(res); SKIN.at = Date.now();
+    log('skin -> ' + res + ' (ids ' + ids.join(',') + ')');
+    return true;
+  }
+  // 万一配置表在开打前没读到（理论上不会）：进关后把当前这局的主角模型换个脸兜底
+  function skinSwapLive(res) {
+    var c = ctl(); if (!c) return false;
+    var h = null;
+    try { var rt = c._runTimeData || {}; h = rt.mainHero || (c._roleMgr && c._roleMgr._mainHero); } catch (e) { }
+    if (!h || !h._view) return false;
+    var v = h._view, b = null;
+    try { cc.assetManager.bundles.forEach(function (x, k) { if (String(k) === 'zhuandao') b = x; }); } catch (e) { }
+    if (!b) return false;
+    try {
+      b.load('prefab/hero/' + res, cc.Prefab, function (err, pf) {
+        if (err || !pf || !v.isValid) return;
+        var old = v._modelNode, node = cc.instantiate(pf);
+        if (old) { node.setScale(old.scale); node.setPosition(old.position); }
+        node.parent = v._viewRoot;
+        if (old) { old.removeFromParent(); old.destroy(); }
+        v._modelNode = node;
+        v._modelSprites = node.getComponentsInChildren(cc.Sprite);
+        if (v._setShadowNode) { try { v._setShadowNode(node.getChildByName('shadow')); } catch (e) { } }
+        h._config.res = String(res);
+        SKIN.node = node;
+        log('skin live-swap -> ' + res);
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  // 每局第一次在场上看到主角时对一次账：
+  //   模型节点是本局新建的  -> 开打前那次换脸生效了，什么都不用做；
+  //   模型节点还是上一局那个 -> 这局没重建模型，现场兜底换脸。
+  // （不能拿配置表的 res 当证据：我们改的就是它，它永远显示新值。）
+  function skinCheck() {
+    var c = ctl(); if (!c) return;
+    var h = null;
+    try { var rt = c._runTimeData || {}; h = rt.mainHero || (c._roleMgr && c._roleMgr._mainHero); } catch (e) { }
+    if (!h || !h._view) return;
+    var node = h._view._modelNode || null;
+    if (!node) return;
+    SKIN.seen = h._config ? String(h._config.res) : null;
+    if (SKIN.checked) return;
+    SKIN.checked = true;
+    if (SKIN.want && SKIN.node && node === SKIN.node) {
+      log('skin: model reused -> live swap ' + SKIN.want);
+      skinSwapLive(SKIN.want);
+    } else {
+      log('skin: in play as ' + SKIN.seen + ' (want ' + SKIN.want + ')');
+    }
+    SKIN.node = node;
   }
 
   // ---------------------------------------------------------- FairyGUI tree walk
@@ -167,6 +305,7 @@
     log('round over: ' + why);
     roundAt = Date.now(); roundWhy = why;
     S.phase = 'retry';
+    SKIN.staged = false;            // 下一局开打前再抽一张脸
   }
 
   var _lt = -1, _lrt = -1;   // 上一拍的 ticks / runTime（卡住检测用）
@@ -189,6 +328,7 @@
             if (!unlocked(row) && n && n.have < n.need) {
               act(function () { log('unlock click ' + (n.have + 1) + '/' + n.need); return fireClick(row.m_buy); });
             } else {
+              skinStage();                                  // 开打之前换脸
               act(function () { log('start click (unlocked=' + unlocked(row) + ')'); return fireClick(row.m_start); });
             }
           }
@@ -208,12 +348,13 @@
       if (S.phase === 'play') {
         // 1) 结算面板出现 = 这一局结束了
         if (dialogNode() && dialogNode().activeInHierarchy) { roundOver('result panel', Date.now()); return; }
+        skinCheck();                                    // 2) 对一次账（首次看到主角时）
         var st = stat();
         S.lastStat = st;
         if (!st || !st.ticks) return;
-        // 2) 主角没了
+        // 3) 主角没了
         if (st.dead) { roundOver('dead', Date.now()); return; }
-        // 3) 画面不动了（游戏时间不再走）
+        // 4) 画面不动了（游戏时间不再走）
         if (st.ticks > 40 && st.runTime === _lrt) {
           S._stall = (S._stall || 0) + 1;
           if (S._stall > 6) { roundOver('stalled at ' + st.runTime + 's', Date.now()); return; }
@@ -241,6 +382,7 @@
           return;
         }
         if (el > 15000) { reload('retry did not work'); return; }
+        skinStage();                                    // 新一局开打之前换脸
         act(function () { log('press retry'); return pressRetry(); }, 1200);
         return;
       }
