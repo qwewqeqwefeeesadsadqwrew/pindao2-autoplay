@@ -142,7 +142,7 @@
     // measured (16 seeds, _ab/r9/_C_finishclear16.txt): 15 of the 16 runs came out
     // byte-identical, and the one run it did touch went from 2 survivors to 6. Rule kept
     // out -- there is no evidence it helps and one seed where it hurts.
-    var huntRange = opt.huntRange || 1500;
+    var huntRange = opt.huntRange || 2000;
     if (opt.clearHunt === true && world.foes.length <= (opt.clearFoeMax !== undefined ? opt.clearFoeMax : 6)) {
       huntRange = opt.clearHuntRange !== undefined ? opt.clearHuntRange : 20000;
     }
@@ -151,21 +151,21 @@
       var f = world.foes[i];
       if (f.dead) continue;
       if (opt.skipBoss && isBoss(f, opt)) continue;        // 清场阶段：BOSS 不算猎物
-      if (E.heroCnt(f) > E.heroCnt(me)) continue;          // 刀比我们多的：不碰
+      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 1.2)) continue;          // 刀比我们多的：不碰
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       if (wantFinish && freeKill(world, f, cap, finishSafe)) {
         if (d > finishRange) continue;                     // 空壳：够得着就去捡
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 1.45) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin || 1.1) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
         // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
         // 画面上只剩「追着跑」。近距离照样追（还能截击）。
-        if (d > (opt.chaseNear || 700)) {
+        if (d > (opt.chaseNear || 1200)) {
           var ux2 = (f.x - me.x) / d, uy2 = (f.y - me.y) / d;
           var away2 = (f.dirx || 0) * ux2 + (f.diry || 0) * uy2;
-          if (away2 > (opt.chaseAway || 0.35) && (f.speed || 0) >= (me.speed || 0) * (opt.chaseSpeed || 0.85)) continue;
+          if (away2 > (opt.chaseAway || 0.75) && (f.speed || 0) >= (me.speed || 0) * (opt.chaseSpeed || 0.95)) continue;
         }
         // 落单要求：远山 2026-10-21 定「不用落单——只要算出来打得过就冲上去打」。
         // 默认 0 = 关掉这条；`?alone=520` 可以退回到「只打落单的」。
@@ -606,7 +606,7 @@
       // in front of us. Seed 55 died at 196 s (16 s after the BOSS spawns) on the first
       // version, which let a corpse 90 degrees off the escape line pull the hero sideways;
       // a corridor test is what the loot detour above already uses.
-      if (!loot && tgt && opt.finish !== false && (!dom || dom.d > (opt.fleeKillSafe !== undefined ? opt.fleeKillSafe : 1600))) {
+      if (!loot && tgt && opt.finish !== false && (!dom || dom.d > (opt.fleeKillSafe !== undefined ? opt.fleeKillSafe : 1000))) {
         var fkRange = opt.fleeKillRange !== undefined ? opt.fleeKillRange : 800;
         var fkOff = opt.fleeKillOff !== undefined ? opt.fleeKillOff : 300;
         var fkCap = opt.finishBlades !== undefined ? opt.finishBlades : 6;
@@ -642,7 +642,7 @@
         // 第 16 关 70 多人混战，全场每秒都有人死——只看「有人死」会一直捡别人的掉落。
         // 所以加两条：① 眼前 500 内就有能打的，先打不捡；② 只捡身边 520 内的。
         var soon = pickTarget(world, opt);
-        if (!(soon && soon.d < (opt.lootPreyGap !== undefined ? opt.lootPreyGap : 500))) {
+        if (!(soon && soon.d < (opt.lootPreyGap !== undefined ? opt.lootPreyGap : 900))) {
           var lootW = pickWaypoint(world, { waypointRange: opt.lootRadius || 520 });
           if (lootW) { tgt = lootW; mode = 'loot'; }
         }
