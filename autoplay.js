@@ -315,8 +315,12 @@
     if (!window.ZD12LOOP) { log('no ZD12LOOP'); return false; }
     try {
       if (loopS && loopS.stop) loopS.stop();
+      // 第 16 关强敌多（5 只 atk3 的睡眠、60 刀敌人），用第 3 关那套威胁圈会一直逃：
+      // 公网实测逃跑占 58%。这关把「算威胁」的半径和撤退线都收紧，靠近了才躲。
+      var lvOpt = LEVEL_NO === 16 ? { standoff: 1000, domRange: 1600 } : {};
       loopS = window.ZD12LOOP.start({ period: 66, bossRule: BOSS_RULE,
-        bossId: BOSS_ID, bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax });
+        bossId: BOSS_ID, bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax,
+        standoff: lvOpt.standoff, domRange: lvOpt.domRange });
       log('loop started');
       return true;
     } catch (e) { S.err = 'loop:' + e; log('loop ERR ' + e); return false; }
