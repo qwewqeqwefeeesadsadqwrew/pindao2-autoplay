@@ -324,7 +324,7 @@
         ? { standoff: 800, domRange: 1200, domExchange: 2.0,
             ndir: 12, horizon: 1.0, focus: 900 }
         : {};
-      loopS = window.ZD12LOOP.start({ period: LEVEL_NO === 16 ? 100 : 66, bossRule: BOSS_RULE,
+      loopS = window.ZD12LOOP.start({ period: LEVEL_NO === 16 ? 100 : 88, bossRule: BOSS_RULE,
         bossId: BOSS_ID, bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax,
         standoff: lvOpt.standoff, domRange: lvOpt.domRange, domExchange: lvOpt.domExchange,
         ndir: lvOpt.ndir, horizon: lvOpt.horizon, focus: lvOpt.focus });

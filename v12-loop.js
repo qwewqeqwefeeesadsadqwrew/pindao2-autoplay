@@ -714,11 +714,16 @@
       if (wts.clash === undefined) wts.clash = opt.bossDuelClash !== undefined ? opt.bossDuelClash : 0;
     }
     var edgePad = opt.edgePad !== undefined ? opt.edgePad : (dom ? 760 : 420);
+    // 刀多了自动降载：每拍要克隆世界、把 ndir 个方向各模拟 horizon 秒，
+    // 刀数越多每一步越慢（第 16 关实测 295 把时单拍 52ms、峰值 229ms，帧率掉到 10）。
+    // 刀数 ≥140 时把方向砍半、预测缩短、参演半径收小；前期刀少，照旧用满精度。
+    var myBlades = E.heroCnt(me);
+    var heavy = myBlades >= (opt.heavyBlades !== undefined ? opt.heavyBlades : 140);
     var res = E.plan(world, {
-      ndir: opt.ndir || 24,
+      ndir: opt.ndir || (heavy ? 12 : 24),
       speeds: opt.speeds || [1],
-      horizon: opt.horizon || 1.4,
-      focus: opt.focus || 1250,
+      horizon: opt.horizon || (heavy ? 1.0 : 1.4),
+      focus: opt.focus || (heavy ? 900 : 1250),
       propFocus: opt.propFocus || 620,
       target: tgt,
       minTravel: opt.minTravel,
