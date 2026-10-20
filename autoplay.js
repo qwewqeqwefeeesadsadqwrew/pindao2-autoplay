@@ -317,10 +317,17 @@
       if (loopS && loopS.stop) loopS.stop();
       // 第 16 关强敌多（5 只 atk3 的睡眠、60 刀敌人），用第 3 关那套威胁圈会一直逃：
       // 公网实测逃跑占 58%。这关把「算威胁」的半径和撤退线都收紧，靠近了才躲。
-      var lvOpt = LEVEL_NO === 16 ? { standoff: 800, domRange: 1200, domExchange: 2.0 } : {};
-      loopS = window.ZD12LOOP.start({ period: 66, bossRule: BOSS_RULE,
+      // 第 16 关人多刀多：判断层每拍要克隆整个世界、把 24 个方向各模拟 84 步，
+      // 刀数涨到 300 时单拍 52ms（峰值 229ms），66ms 一拍直接占满主线程 -> 越打越卡。
+      // 这关把决策开销砍下来：方向 24->12、预测 1.4->1.0 秒、参演半径 1250->900、节拍 66->100ms。
+      var lvOpt = LEVEL_NO === 16
+        ? { standoff: 800, domRange: 1200, domExchange: 2.0,
+            ndir: 12, horizon: 1.0, focus: 900 }
+        : {};
+      loopS = window.ZD12LOOP.start({ period: LEVEL_NO === 16 ? 100 : 66, bossRule: BOSS_RULE,
         bossId: BOSS_ID, bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax,
-        standoff: lvOpt.standoff, domRange: lvOpt.domRange });
+        standoff: lvOpt.standoff, domRange: lvOpt.domRange, domExchange: lvOpt.domExchange,
+        ndir: lvOpt.ndir, horizon: lvOpt.horizon, focus: lvOpt.focus });
       log('loop started');
       return true;
     } catch (e) { S.err = 'loop:' + e; log('loop ERR ' + e); return false; }
