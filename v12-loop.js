@@ -639,8 +639,13 @@
       // 逃跑中不拐弯捡东西（那会把命捡没）；威胁已经拉开的除外。
       if (sinceDie < (opt.lootAfterKillS !== undefined ? opt.lootAfterKillS : 1.5) &&
           !(dom && dom.d < (opt.lootDangerD || 900))) {
-        var lootW = pickWaypoint(world, { waypointRange: opt.lootRadius || 650 });
-        if (lootW) { tgt = lootW; mode = 'loot'; }
+        // 第 16 关 70 多人混战，全场每秒都有人死——只看「有人死」会一直捡别人的掉落。
+        // 所以加两条：① 眼前 500 内就有能打的，先打不捡；② 只捡身边 520 内的。
+        var soon = pickTarget(world, opt);
+        if (!(soon && soon.d < (opt.lootPreyGap !== undefined ? opt.lootPreyGap : 500))) {
+          var lootW = pickWaypoint(world, { waypointRange: opt.lootRadius || 520 });
+          if (lootW) { tgt = lootW; mode = 'loot'; }
+        }
       }
     }
     if (!tgt) {
