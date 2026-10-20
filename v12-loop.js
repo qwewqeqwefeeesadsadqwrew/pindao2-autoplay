@@ -158,7 +158,7 @@
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 0.7) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin || 0.25) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
         // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
         // 画面上只剩「追着跑」。近距离照样追（还能截击）。
@@ -508,7 +508,7 @@
     // 6000 的全图撤退原本是防 BOSS 的，但 BOSS 在场时下面 bossPhase 分支会先接管，
     // 用不着普通逃跑逻辑跟着满地图跑——那是「只看逃跑不看架」的最大来源。
     // `?boss=0` 关掉终局规则时退回 6000（那时 BOSS 确实得全图躲）。
-    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 800);
+    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 500);
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
     // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
