@@ -142,7 +142,7 @@
     // measured (16 seeds, _ab/r9/_C_finishclear16.txt): 15 of the 16 runs came out
     // byte-identical, and the one run it did touch went from 2 survivors to 6. Rule kept
     // out -- there is no evidence it helps and one seed where it hurts.
-    var huntRange = opt.huntRange || 950;
+    var huntRange = opt.huntRange || 1500;
     if (opt.clearHunt === true && world.foes.length <= (opt.clearFoeMax !== undefined ? opt.clearFoeMax : 6)) {
       huntRange = opt.clearHuntRange !== undefined ? opt.clearHuntRange : 20000;
     }
@@ -158,11 +158,18 @@
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 1.3) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin || 1.45) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
-        // 落单要求：旁边不能有别的敌人。`aloneRange` 给 0 或负数 = 关掉这条
-        // （清场阶段用：场上就剩几个了，旁边有谁也得上去打）。
-        var aloneR = opt.aloneRange !== undefined ? opt.aloneRange : 520;
+        // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
+        // 画面上只剩「追着跑」。近距离照样追（还能截击）。
+        if (d > (opt.chaseNear || 700)) {
+          var ux2 = (f.x - me.x) / d, uy2 = (f.y - me.y) / d;
+          var away2 = (f.dirx || 0) * ux2 + (f.diry || 0) * uy2;
+          if (away2 > (opt.chaseAway || 0.35) && (f.speed || 0) >= (me.speed || 0) * (opt.chaseSpeed || 0.85)) continue;
+        }
+        // 落单要求：远山 2026-10-21 定「不用落单——只要算出来打得过就冲上去打」。
+        // 默认 0 = 关掉这条；`?alone=520` 可以退回到「只打落单的」。
+        var aloneR = opt.aloneRange !== undefined ? opt.aloneRange : 0;
         if (aloneR > 0) {
           var alone = true;
           for (j = 0; j < world.foes.length; j++) {
@@ -304,7 +311,8 @@
   //    A policy that re-picks from scratch every tick will happily oscillate between two
   //    good ideas and travel nowhere.
   var _state = { t: -1e9, panic: false, tgt: null, mode: '', until: -1e9,
-    bossIn: false, bossAt: 0, bossKillAt: 0, bossDie: -1 };
+    bossIn: false, bossAt: 0, bossKillAt: 0, bossDie: -1,
+    lastDie: 0, lastDieT: -1e9 };
   function rewind(world) {
     if (!(world.t > _state.t)) {
       _state.panic = false; _state.tgt = null; _state.mode = ''; _state.until = -1e9;
@@ -370,7 +378,9 @@
       // 300, and the ring was gone 19 s later. A dominant threat now counts from anywhere
       // on the map. (16-seed A/B in _ab/: survival median 199.8 -> 210.1 s, mean 185 -> 216 s,
       // sub-100 s wipeouts 4 -> 1, kills 33.0 -> 34.4.)
-      if (d > (opt.domRange || 9000)) continue;
+      // 远处的强者不是威胁，只是「别往那边走」。9000（全图）原本是给 BOSS 用的，
+      // 现在 BOSS 由终局规则单独接管；普通敌人按身位算：2200 内才算「要躲的」。
+      if (d > (opt.domRange || 2200)) continue;
       if (!best || d < best.d) best = { h: f, d: d, atk: theirAtk, blades: E.heroCnt(f) };
     }
     return best;
@@ -493,7 +503,11 @@
     // Same reasoning as domRange above: with a 1700 px standoff a BOSS that spawns on the
     // far side of the map is not a reason to run yet, and by the time it is, its 300 px/s
     // has already eaten the gap. Start running the moment one exists.
-    var standoff = opt.standoff || 6000;
+    // 逃跑距离：普通敌人 1400 像素内才值当跑（接触距离 389~529，留两倍余量）；
+    // 6000 的全图撤退原本是防 BOSS 的，但 BOSS 在场时下面 bossPhase 分支会先接管，
+    // 用不着普通逃跑逻辑跟着满地图跑——那是「只看逃跑不看架」的最大来源。
+    // `?boss=0` 关掉终局规则时退回 6000（那时 BOSS 确实得全图躲）。
+    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 1400);
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
     // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
@@ -518,8 +532,11 @@
       // 半径 = min(clearLeash, 到大龙的距离 + clearSlack)，大龙越近、能追的范围越小；
       // 半径里没有别的敌人就直接进决战。这样「打得到的别人先打、打不到就打大龙」。
       var bossD = Math.sqrt((bossF.x - me.x) * (bossF.x - me.x) + (bossF.y - me.y) * (bossF.y - me.y));
-      var maxChase = Math.min(opt.clearLeash !== undefined ? opt.clearLeash : 1800,
-        bossD + (opt.clearSlack !== undefined ? opt.clearSlack : 600));
+      // 清场半径：远山 2026-10-21 要「旁边有别的敌人先杀别的」。原来 1800 / +600，
+      // 实战里大龙贴上来后只剩 1100 的圈子，圈外还有活人就直接去打大龙了。
+      // 放宽到 2400 / +1200，够得着的人都先清掉。
+      var maxChase = Math.min(opt.clearLeash !== undefined ? opt.clearLeash : 2400,
+        bossD + (opt.clearSlack !== undefined ? opt.clearSlack : 1200));
       if (!_state.bossIn) {
         _state.bossIn = true; _state.bossAt = world.t;
         _state.bossKillAt = world.t; _state.bossDie = world.dieHeroCnt || 0;
@@ -527,8 +544,10 @@
       if ((world.dieHeroCnt || 0) > _state.bossDie) {
         _state.bossDie = world.dieHeroCnt; _state.bossKillAt = world.t;
       }
-      var overTime = world.t - _state.bossAt >= (opt.bossClearMax !== undefined ? opt.bossClearMax : 18);
-      var overIdle = world.t - _state.bossKillAt >= (opt.bossIdleMax !== undefined ? opt.bossIdleMax : 8);
+      // 远山 2026-10-21：大龙出来后「旁边有别的敌人要先杀别的，杀完再打大龙」。
+      // 所以清场时限放宽（原来 8 秒没死人 / 18 秒就转决战，常常人还没清完就去拼大龙了）。
+      var overTime = world.t - _state.bossAt >= (opt.bossClearMax !== undefined ? opt.bossClearMax : 60);
+      var overIdle = world.t - _state.bossKillAt >= (opt.bossIdleMax !== undefined ? opt.bossIdleMax : 25);
       if (overTime || overIdle) {
         tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
         mode = 'boss->duel';
@@ -611,9 +630,30 @@
       }
     }
     if (!tgt) {
+      // 打完架冲上去捡：死一个人（不管谁杀的）后 3 秒内，900 像素内有掉落就先去捡。
+      // 远山 2026-10-21：「打完敌人会掉落东西，要冲上去捡」——这一条只输给逃命和 BOSS 段。
+      var dieNow = world.dieHeroCnt || 0;
+      if (dieNow > (_state.lastDie || 0)) { _state.lastDie = dieNow; _state.lastDieT = world.t; }
+      var sinceDie = world.t - _state.lastDieT;
+      // 逃跑中不拐弯捡东西（那会把命捡没）；威胁已经拉开的除外。
+      if (sinceDie < (opt.lootAfterKillS !== undefined ? opt.lootAfterKillS : 1.5) &&
+          !(dom && dom.d < (opt.lootDangerD || 900))) {
+        var lootW = pickWaypoint(world, { waypointRange: opt.lootRadius || 650 });
+        if (lootW) { tgt = lootW; mode = 'loot'; }
+      }
+    }
+    if (!tgt) {
       tgt = pickTarget(world, opt);
       mode = tgt ? 'hunt' : 'farm';
       if (!tgt) { tgt = pickWaypoint(world, opt); mode = tgt ? 'farm->prop' : 'farm'; }
+      else if (opt.huntLoot === true) {
+        // 边打边捡：追击路线上正好躺着刀，顺手收。只认正前方 600 px。
+        // 实测（沙盘 6 seeds）默认关：带上它击杀 33.2 -> 30.3、还出现 71 秒早死；
+        // 开 `?loot=1` 可以试。等实机画面再决定要不要开。
+        var lopt = { lootAhead: 600, lootOff: 180 };
+        var lp = propOnTheWay(world, me, tgt.x, tgt.y, lopt);
+        if (lp) { tgt = lp; mode = 'hunt+loot'; }
+      }
     }
     // Commit to it for a moment (see _state). A fresh urgency always wins; anything else
     // has to wait out the hold, so we stop ping-ponging between two good ideas.
@@ -633,7 +673,7 @@
         _state.tgt = tgt; _state.mode = mode; _state.until = world.t + holdS;
       }
     }
-    var huntW = opt.huntWeight !== undefined ? opt.huntWeight : 8;
+    var huntW = opt.huntWeight !== undefined ? opt.huntWeight : 18;
     if (mode === 'flee') {
       // the closer it is, the louder the run-away target talks
       // `dom` can be null here: the commit hold below keeps the previous `flee` mode for up
@@ -645,6 +685,8 @@
     }
     if (mode === 'flee+loot') huntW = 20;
     if (mode === 'flee+kill') huntW = 20;   // same licence as the loot detour
+    if (mode === 'hunt+loot') huntW = opt.huntLootW !== undefined ? opt.huntLootW : 14;
+    if (mode === 'loot') huntW = opt.lootWeight !== undefined ? opt.lootWeight : 24;
     // 清场/决战：目标就是「过去打」，给足权重，别再为路边的掉落磨蹭
     // （HP 是硬约束，见引擎 plan 的 r.hard，所以加这个不会让主角去送死）。
     if (mode === 'boss->clear' || mode === 'boss->clear+loot') huntW = opt.bossClearW || 22;
