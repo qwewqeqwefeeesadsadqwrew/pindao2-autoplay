@@ -202,9 +202,22 @@
       try { return (x.title === label || x.text === label) && typeof x.fireClick === 'function'; } catch (e) { return false; }
     }, 8);
   }
-  function levelRow(idx) {
+  function levelRow(no) {
     var list = fguiFind('level_list'); if (!list) return null;
-    try { return list.getChildAt(idx); } catch (e) { return null; }
+    // 关卡列表是虚拟滚动：getChildAt 给的是「可视池里的第几个」，不是关卡号。
+    // 先把目标行滚进可视区（行高 178，居中），再按「第 N 关」的文本找。
+    try {
+      var sp = list.scrollPane;
+      sp.posY = Math.max(0, (no - 1) * 178 - sp.viewHeight / 2 + 89);
+    } catch (e) { }
+    for (var i = 0; i < list.numChildren; i++) {
+      var r = null; try { r = list.getChildAt(i); } catch (e) { continue; }
+      if (!r) continue;
+      var label = '第' + no + '关';
+      var hit = search(r, function (o) { return o.text === label || o.title === label; }, 4);
+      if (hit) return r;
+    }
+    return null;
   }
   function buyNeed(row) {
     try {
@@ -276,6 +289,18 @@
   // 地址后面加 ?boss=0 关掉这条，回到老的「危险就一直逃」。
   var BOSS_RULE = !/(^|[?&])boss=0(&|$)/.test(location.search);
   S.bossRule = BOSS_RULE;
+  // 关卡号：默认第 3 关；`?level=16` 演第 16 关（雾战模式）。关卡列表是虚拟滚动，
+  // 所以要先把列表滚到那一行再按「第 N 关」的文本找。
+  function intParam(name, dft) {
+    var m = new RegExp('[?&]' + name + '=(\\d+)').exec(location.search);
+    return m ? Number(m[1]) : dft;
+  }
+  var LEVEL_NO = intParam('level', 3);
+  S.level = LEVEL_NO;
+  // 关底 BOSS 的编号按关卡走：第 3 关 10303、第 16 关 100303。
+  // 第 16 关还有 5 个 is_boss 的「睡眠」和一只 BOSS_03，不能靠 is_boss / 攻击力兜底认。
+  var BOSS_ID = intParam('bossId', LEVEL_NO === 16 ? 100303 : 10303);
+  S.bossId = BOSS_ID;
   // 清场时限的两个旋钮（都有默认值，见 v12-loop.js）：?bossIdle=秒 追多久打不到就转决战；
   // ?bossMax=秒 清场最多持续多久。想现场试手感就改链接，不用改代码。
   function numParam(name) {
@@ -291,7 +316,7 @@
     try {
       if (loopS && loopS.stop) loopS.stop();
       loopS = window.ZD12LOOP.start({ period: 66, bossRule: BOSS_RULE,
-        bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax });
+        bossId: BOSS_ID, bossIdleMax: S.bossIdleMax, bossClearMax: S.bossClearMax });
       log('loop started');
       return true;
     } catch (e) { S.err = 'loop:' + e; log('loop ERR ' + e); return false; }
@@ -337,7 +362,7 @@
       if (S.phase === 'enter') {
         if (inLevel()) { S.phase = 'play'; log('in level: ' + sn); startLoop(); return; }
         if (sn === 'subgame') {
-          var row = levelRow(2);
+          var row = levelRow(LEVEL_NO);
           if (row) {
             var n = buyNeed(row);
             if (!unlocked(row) && n && n.have < n.need) {

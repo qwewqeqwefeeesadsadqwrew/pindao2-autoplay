@@ -448,13 +448,14 @@
   // 一句实话写进代码：这个 BOSS 是设计上打不过的（我们 atk 1 / 它 atk 3；刀数拉满 400 把也只能
   // 磨掉它约三分之一，见 07 文档第三节）。所以「决战」的结果基本是主角阵亡——这是远山要的节目
   // 效果，不是策略出错。地址后面加 `?boss=0` 关掉这条规则，回到老的「一直逃」。
+  // 只认「关底 BOSS 编号」。原来还按 `is_boss:1` 和攻击力 3 兜底，第 16 关会认错：
+  // 那关有 5 只「睡眠」（is_boss:1、atk 3）和一只 BOSS_03，全被当成大龙，
+  // 清场/决战会在几个「大龙」之间乱跳（2026-10-21 加第 16 关时发现）。
+  // 编号由驱动按关卡传入：第 3 关 10303、第 16 关 100303。
   function isBoss(f, opt) {
     if (!f || f.dead) return false;
     var id = opt && opt.bossId !== undefined ? opt.bossId : 10303;
-    if (Number(f.id) === Number(id)) return true;
-    var t = D && D.HERO && D.HERO[f.id];
-    if (t && t.is_boss) return true;
-    return E.bladeAtk(f) >= (opt && opt.bossAtk !== undefined ? opt.bossAtk : 3);
+    return Number(f.id) === Number(id);
   }
   function bossFoe(world, opt) {
     for (var i = 0; i < world.foes.length; i++) if (isBoss(world.foes[i], opt)) return world.foes[i];
