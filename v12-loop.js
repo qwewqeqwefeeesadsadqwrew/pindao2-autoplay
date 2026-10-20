@@ -142,7 +142,7 @@
     // measured (16 seeds, _ab/r9/_C_finishclear16.txt): 15 of the 16 runs came out
     // byte-identical, and the one run it did touch went from 2 survivors to 6. Rule kept
     // out -- there is no evidence it helps and one seed where it hurts.
-    var huntRange = opt.huntRange || 2000;
+    var huntRange = opt.huntRange || 999999;
     if (opt.clearHunt === true && world.foes.length <= (opt.clearFoeMax !== undefined ? opt.clearFoeMax : 6)) {
       huntRange = opt.clearHuntRange !== undefined ? opt.clearHuntRange : 20000;
     }
@@ -151,21 +151,21 @@
       var f = world.foes[i];
       if (f.dead) continue;
       if (opt.skipBoss && isBoss(f, opt)) continue;        // 清场阶段：BOSS 不算猎物
-      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 1.2)) continue;          // 刀比我们多的：不碰
+      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 1.4)) continue;          // 刀比我们多的：不碰
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       if (wantFinish && freeKill(world, f, cap, finishSafe)) {
         if (d > finishRange) continue;                     // 空壳：够得着就去捡
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 1.1) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin || 1.0) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
         // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
         // 画面上只剩「追着跑」。近距离照样追（还能截击）。
-        if (d > (opt.chaseNear || 1200)) {
+        if (d > (opt.chaseNear || 999999)) {
           var ux2 = (f.x - me.x) / d, uy2 = (f.y - me.y) / d;
           var away2 = (f.dirx || 0) * ux2 + (f.diry || 0) * uy2;
-          if (away2 > (opt.chaseAway || 0.75) && (f.speed || 0) >= (me.speed || 0) * (opt.chaseSpeed || 0.95)) continue;
+          if (away2 > (opt.chaseAway || 9) && (f.speed || 0) >= (me.speed || 0) * (opt.chaseSpeed || 9)) continue;
         }
         // 落单要求：远山 2026-10-21 定「不用落单——只要算出来打得过就冲上去打」。
         // 默认 0 = 关掉这条；`?alone=520` 可以退回到「只打落单的」。
@@ -369,7 +369,7 @@
       if (f.dead) continue;
       var theirAtk = E.bladeAtk(f), theirRing = E.heroBladeHp(f);
       var mightier = E.heroCnt(f) > myCnt * (opt.domBladeRatio || 1.25);
-      var outgunned = (theirRing / myAtk) > (myRing / theirAtk) * (opt.domExchange || 1.3);
+      var outgunned = (theirRing / myAtk) > (myRing / theirAtk) * (opt.domExchange || 2.5);
       if (!mightier && !outgunned) continue;
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       // Range: 2400 px is "close enough to matter right now". Measured on seed 7, the
@@ -380,7 +380,7 @@
       // sub-100 s wipeouts 4 -> 1, kills 33.0 -> 34.4.)
       // 远处的强者不是威胁，只是「别往那边走」。9000（全图）原本是给 BOSS 用的，
       // 现在 BOSS 由终局规则单独接管；普通敌人按身位算：2200 内才算「要躲的」。
-      if (d > (opt.domRange || 2200)) continue;
+      if (d > (opt.domRange || 1200)) continue;
       if (!best || d < best.d) best = { h: f, d: d, atk: theirAtk, blades: E.heroCnt(f) };
     }
     return best;
@@ -508,7 +508,7 @@
     // 6000 的全图撤退原本是防 BOSS 的，但 BOSS 在场时下面 bossPhase 分支会先接管，
     // 用不着普通逃跑逻辑跟着满地图跑——那是「只看逃跑不看架」的最大来源。
     // `?boss=0` 关掉终局规则时退回 6000（那时 BOSS 确实得全图躲）。
-    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 1400);
+    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 800);
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
     // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
@@ -592,7 +592,7 @@
         f = world.foes[i];
         if (f.dead) continue;
         if (E.heroCnt(f) > E.heroCnt(me) * (opt.domBladeRatio || 1.25) ||
-            (E.heroBladeHp(f) / E.bladeAtk(me)) > (E.heroBladeHp(me) / E.bladeAtk(f)) * (opt.domExchange || 1.3))
+            (E.heroBladeHp(f) / E.bladeAtk(me)) > (E.heroBladeHp(me) / E.bladeAtk(f)) * (opt.domExchange || 2.5))
           all.push(f);
       }
       tgt = fleeWaypoint(world, all, me, opt);
