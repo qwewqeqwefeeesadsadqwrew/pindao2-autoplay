@@ -403,6 +403,17 @@
         var st = stat();
         S.lastStat = st;
         if (!st || !st.ticks) return;
+        // 3) 位置卡死：8 秒内移动 < 20 像素 → 整页重载。
+        // 2026-10-21 真机事故：主角和 BOSS 重叠到只差 2 像素，游戏自己的弹开逻辑把双方锁死，
+        // 位置 244 秒没动。那时游戏时间照走，所以下面「时间不动」那条兜底抓不到。
+        if (st.hist && st.hist.length >= 9) {
+          var ha = st.hist[st.hist.length - 9], hb = st.hist[st.hist.length - 1];
+          var moved = Math.sqrt((hb[3] - ha[3]) * (hb[3] - ha[3]) + (hb[4] - ha[4]) * (hb[4] - ha[4]));
+          if (moved < 20) {
+            S._stuck = (S._stuck || 0) + 1;
+            if (S._stuck >= 2) { S._stuck = 0; reload('stuck: no move 16s at ' + Math.round(st.runTime) + 's'); return; }
+          } else { S._stuck = 0; }
+        }
         // 3) 主角没了
         if (st.dead) { roundOver('dead', Date.now()); return; }
         // 4) 画面不动了（游戏时间不再走）

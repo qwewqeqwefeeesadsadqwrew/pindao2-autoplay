@@ -452,6 +452,19 @@
   // 那关有 5 只「睡眠」（is_boss:1、atk 3）和一只 BOSS_03，全被当成大龙，
   // 清场/决战会在几个「大龙」之间乱跳（2026-10-21 加第 16 关时发现）。
   // 编号由驱动按关卡传入：第 3 关 10303、第 16 关 100303。
+  // 决战的目标点：离大龙 520 像素（接触距离外一点），不朝它中心钻。
+  // 真机事故（2026-10-21）：目标点就是 BOSS 中心，主角一路走进它身体里，两个角色重叠到
+  // 只差 2 像素，游戏自己的 moveBackByHero 互相弹开把双方锁死——位置 244 秒纹丝不动。
+  // 已经贴得太近时改走切线（绕圈），刀环相切照样能打，但不会再穿进对方身体。
+  function duelPoint(me, bossF) {
+    var dx = bossF.x - me.x, dy = bossF.y - me.y;
+    var d = Math.sqrt(dx * dx + dy * dy) || 1;
+    if (d < 380) {
+      return { x: me.x - dy / d * 600, y: me.y + dx / d * 600, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+    }
+    var k = Math.max(0, d - 520) / d;
+    return { x: me.x + dx * k, y: me.y + dy * k, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+  }
   function isBoss(f, opt) {
     if (!f || f.dead) return false;
     var id = opt && opt.bossId !== undefined ? opt.bossId : 10303;
@@ -550,7 +563,7 @@
       var overTime = world.t - _state.bossAt >= (opt.bossClearMax !== undefined ? opt.bossClearMax : 60);
       var overIdle = world.t - _state.bossKillAt >= (opt.bossIdleMax !== undefined ? opt.bossIdleMax : 25);
       if (overTime || overIdle) {
-        tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+        tgt = duelPoint(me, bossF);
         mode = 'boss->duel';
         bossTag = overTime ? 'clear-timeout' : 'clear-idle';
       } else {
@@ -583,7 +596,7 @@
       }
     } else if (bossPhase === 'duel') {
       // 场上只剩我们和大龙：不逃了，直接贴上去。
-      tgt = { x: bossF.x, y: bossF.y, d: 0, id: bossF.id, blades: E.heroCnt(bossF) };
+      tgt = duelPoint(me, bossF);
       mode = 'boss->duel';
     } else if (dom && (dom.d < standoff || (panic && dom.d < standoffOut))) {
       // gather every threat, not just the nearest -- one is enough to be cornered by
