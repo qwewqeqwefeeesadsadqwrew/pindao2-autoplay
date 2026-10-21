@@ -692,7 +692,7 @@
         _state.tgt = tgt; _state.mode = mode; _state.until = world.t + holdS;
       }
     }
-    var huntW = opt.huntWeight !== undefined ? opt.huntWeight : 18;
+    var huntW = opt.huntWeight !== undefined ? opt.huntWeight : 30;
     if (mode === 'flee') {
       // the closer it is, the louder the run-away target talks
       // `dom` can be null here: the commit hold below keeps the previous `flee` mode for up
@@ -725,6 +725,13 @@
     if (mode === 'boss->duel' || mode === 'boss->duel+loot') {
       if (wts.bladeHp === undefined) wts.bladeHp = opt.bossDuelBladeHp !== undefined ? opt.bossDuelBladeHp : 0;
       if (wts.clash === undefined) wts.clash = opt.bossDuelClash !== undefined ? opt.bossDuelClash : 0;
+    }
+    // 追击时别绕路。引擎默认「掉 1 点刀血 = -1000 分」，追击目标本身就要接触，
+    // 于是它宁可左右绕圈也不朝人走——实测目标在正上方时只有 53.7% 的帧朝上走。
+    // 远山要「见人就打」，追击相位把这两项压低到 300 / 150（不是清零，还会保护 HP）。
+    if (mode === 'hunt' || mode === 'hunt+loot') {
+      if (wts.bladeHp === undefined) wts.bladeHp = opt.huntBladeHp !== undefined ? opt.huntBladeHp : 300;
+      if (wts.clash === undefined) wts.clash = opt.huntClash !== undefined ? opt.huntClash : 150;
     }
     var edgePad = opt.edgePad !== undefined ? opt.edgePad : (dom ? 760 : 420);
     // 刀多了自动降载：每拍要克隆世界、把 ndir 个方向各模拟 horizon 秒，
