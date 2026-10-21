@@ -147,7 +147,7 @@
     try { h = t.node.uiTransform.contentSize.height || h; } catch (e) { }
     _stickHome = {
       x: Math.round((Math.random() * 2 - 1) * (h * 0.06)),
-      y: -Math.round(h * 0.18)
+      y: -Math.round(h * 0.28)
     };
     return _stickHome;
   }
