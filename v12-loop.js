@@ -138,11 +138,25 @@
     } catch (e) { }
     return _stickLayer;
   }
+  // 光圈放哪儿：真人是在手指按下的随机位置；我们模拟成「屏幕中心偏下的拇指区」，
+  // 每局随机一点水平偏移。节点原点就是屏幕中心，y 向上为正。
+  var _stickHome = null;
+  function stickHome(t) {
+    if (_stickHome) return _stickHome;
+    var h = 1334;
+    try { h = t.node.uiTransform.contentSize.height || h; } catch (e) { }
+    _stickHome = {
+      x: Math.round((Math.random() * 2 - 1) * (h * 0.06)),
+      y: -Math.round(h * 0.18)
+    };
+    return _stickHome;
+  }
   function showStick(ux, uy) {
     var t = findStickLayer(); if (!t) return;
     try {
       if (!t._stick1.active) {
-        try { t._stick1.setPosition(0, 0); } catch (e) { }
+        var p = stickHome(t);
+        try { t._stick1.setPosition(p.x, p.y); } catch (e) { }
         t._stick1.active = true;
       }
       if (t._stick2) t._stick2.setPosition(ux * 30, uy * 30);
@@ -160,6 +174,7 @@
   function liveStop() {
     try { liveRoot()._control.mainHeroCancelMove(); } catch (e) { }
     try { var t = findStickLayer(); if (t && t._stick1) t._stick1.active = false; } catch (e) { }
+    _stickHome = null;   // 下一局重新随机一个拇指落点
   }
 
   // ---------------------------------------------------------------- target choice
