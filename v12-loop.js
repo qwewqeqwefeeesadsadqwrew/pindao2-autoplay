@@ -527,7 +527,13 @@
     // 6000 的全图撤退原本是防 BOSS 的，但 BOSS 在场时下面 bossPhase 分支会先接管，
     // 用不着普通逃跑逻辑跟着满地图跑——那是「只看逃跑不看架」的最大来源。
     // `?boss=0` 关掉终局规则时退回 6000（那时 BOSS 确实得全图躲）。
-    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : (me.hp <= (opt.desperateHp !== undefined ? opt.desperateHp : 4) ? 1800 : (me.hp <= (opt.lowHpThreshold !== undefined ? opt.lowHpThreshold : 6) ? 1200 : 500)));
+    // 撤退距离：残血 1800、血少 1200；开局刀少（<10）也提前躲到 900——
+    // 远山 2026-10-21「开局反应很慢，很容易被直接打死」：原来 500 才躲，敌人贴脸才动。
+    var startBlades = opt.startBlades !== undefined ? opt.startBlades : 10;
+    var standoff = opt.standoff || (opt.bossRule === false ? 6000
+      : (me.hp <= (opt.desperateHp !== undefined ? opt.desperateHp : 4) ? 1800
+        : (me.hp <= (opt.lowHpThreshold !== undefined ? opt.lowHpThreshold : 6) ? 1200
+          : (E.heroCnt(me) < startBlades ? 900 : 500))));
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
     // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
