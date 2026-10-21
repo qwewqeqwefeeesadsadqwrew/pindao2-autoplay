@@ -115,15 +115,52 @@
   }
   // The joystick's own call: ZDTouchLayer._onTouchMove normalises the drag vector and
   // then calls exactly this.
+  // 操作光圈：正常玩家拖拽时游戏自己会显示摇杆（ZDTouchLayer 的 _stick1 光圈 / _stick2 内圈）。
+  // 我们直接调 mainHeroMove 绕过了触摸层，所以画面上没有光圈。这里把游戏自己的摇杆节点点亮：
+  // 光圈放屏幕中心、内圈跟着移动方向偏 30 像素——和真人拖拽看到的效果一致。
+  var _stickLayer = null;
+  function findStickLayer() {
+    if (_stickLayer && _stickLayer.node && _stickLayer.node.isValid) return _stickLayer;
+    _stickLayer = null;
+    try {
+      var sc = cc.director.getScene();
+      (function walk(n, d) {
+        if (!n || _stickLayer || d > 14) return;
+        var comps = n.components || [];
+        for (var i = 0; i < comps.length; i++) {
+          var c = comps[i], name = null;
+          try { name = cc.js.getClassName(c); } catch (e) { name = c && c.constructor && c.constructor.name; }
+          if (name && String(name).indexOf('ZDTouchLayer') >= 0 && c._stick1) { _stickLayer = c; return; }
+        }
+        var cs = n.children || [];
+        for (var j = 0; j < cs.length; j++) walk(cs[j], d + 1);
+      })(sc, 0);
+    } catch (e) { }
+    return _stickLayer;
+  }
+  function showStick(ux, uy) {
+    var t = findStickLayer(); if (!t) return;
+    try {
+      if (!t._stick1.active) {
+        try { t._stick1.setPosition(0, 0); } catch (e) { }
+        t._stick1.active = true;
+      }
+      if (t._stick2) t._stick2.setPosition(ux * 30, uy * 30);
+    } catch (e) { }
+  }
   function liveAct(ux, uy) {
     try {
       var st = liveRoot(), c = st && st._control;
       if (!c) return false;
       c.mainHeroMove(ux, uy);
+      showStick(ux, uy);
       return true;
     } catch (e) { return false; }
   }
-  function liveStop() { try { liveRoot()._control.mainHeroCancelMove(); } catch (e) { } }
+  function liveStop() {
+    try { liveRoot()._control.mainHeroCancelMove(); } catch (e) { }
+    try { var t = findStickLayer(); if (t && t._stick1) t._stick1.active = false; } catch (e) { }
+  }
 
   // ---------------------------------------------------------------- target choice
   // Farming is the default. Hunting only opens up when the exchange maths is
