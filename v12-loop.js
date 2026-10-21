@@ -151,14 +151,14 @@
       var f = world.foes[i];
       if (f.dead) continue;
       if (opt.skipBoss && isBoss(f, opt)) continue;        // 清场阶段：BOSS 不算猎物
-      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 2.0)) continue;          // 刀比我们多的：不碰
+      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 1.0)) continue;          // 刀比我们多的：不碰
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       if (wantFinish && freeKill(world, f, cap, finishSafe)) {
         if (d > finishRange) continue;                     // 空壳：够得着就去捡
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 0.25) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin || 0) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
         // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
         // 画面上只剩「追着跑」。近距离照样追（还能截击）。
