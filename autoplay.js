@@ -454,6 +454,8 @@
   // 调试开关：地址后面加 ?auto=0 就只开壳、不自动玩（用来单独验页内工具）
   if (/(^|[?&])auto=0(&|$)/.test(location.search)) { log('autoplay disabled by ?auto=0'); return; }
 
-  setInterval(tick, 400);
+  // 轮询间隔：进关检测原来 400ms 一次，落地后最多要等 0.4 秒才启动判断层。
+  // 远山 2026-10-21：「进关落地的那一秒就得动起来」——压到 120ms。
+  setInterval(tick, 120);
   log('autoplay.js v3 loaded');
 })();
