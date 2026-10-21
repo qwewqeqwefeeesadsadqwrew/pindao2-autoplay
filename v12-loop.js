@@ -146,19 +146,25 @@
     if (opt.clearHunt === true && world.foes.length <= (opt.clearFoeMax !== undefined ? opt.clearFoeMax : 6)) {
       huntRange = opt.clearHuntRange !== undefined ? opt.clearHuntRange : 20000;
     }
+    // 血量低的时候收着打：只挑刀数明显少于我们的（不然会被磨死，活不到大龙）。
+    // 远山 2026-10-21：「这一版坚持不到大龙就死了」——满血时见人就打，残血时保命优先。
+    var lowHp = world.me.hp <= (opt.lowHpThreshold !== undefined ? opt.lowHpThreshold : 6);
+    var bladeTol = opt.foeBladeTol || (lowHp ? 0.7 : 1.0);
+    // 残血（≤3）只捡刀，不打人。
+    if (world.me.hp <= (opt.desperateHp !== undefined ? opt.desperateHp : 4) - 1) bladeTol = 0;
     var best = null, i, j;
     for (i = 0; i < world.foes.length; i++) {
       var f = world.foes[i];
       if (f.dead) continue;
       if (opt.skipBoss && isBoss(f, opt)) continue;        // 清场阶段：BOSS 不算猎物
-      if (E.heroCnt(f) > E.heroCnt(me) * (opt.foeBladeTol || 1.0)) continue;          // 刀比我们多的：不碰
+      if (E.heroCnt(f) > E.heroCnt(me) * bladeTol) continue;          // 刀比我们多的：不碰
       var d = Math.sqrt((f.x - me.x) * (f.x - me.x) + (f.y - me.y) * (f.y - me.y));
       if (wantFinish && freeKill(world, f, cap, finishSafe)) {
         if (d > finishRange) continue;                     // 空壳：够得着就去捡
       } else {
         var theirHp = E.heroBladeHp(f), theirAtk = E.bladeAtk(f);
         var need = theirHp / myAtk, absorb = myHp / theirAtk;
-        if (need * (opt.huntMargin || 0) > absorb) continue; // 换不过来：不碰
+        if (need * (opt.huntMargin !== undefined ? opt.huntMargin : (lowHp ? 1.2 : 0)) > absorb) continue; // 换不过来：不碰
         if (d > huntRange) continue;
         // 追不上的不追：目标正在远离、速度不比我慢、距离已经拉开——直线追永远缩不短，
         // 画面上只剩「追着跑」。近距离照样追（还能截击）。
@@ -521,7 +527,7 @@
     // 6000 的全图撤退原本是防 BOSS 的，但 BOSS 在场时下面 bossPhase 分支会先接管，
     // 用不着普通逃跑逻辑跟着满地图跑——那是「只看逃跑不看架」的最大来源。
     // `?boss=0` 关掉终局规则时退回 6000（那时 BOSS 确实得全图躲）。
-    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : 500);
+    var standoff = opt.standoff || (opt.bossRule === false ? 6000 : (me.hp <= (opt.desperateHp !== undefined ? opt.desperateHp : 4) ? 1800 : (me.hp <= (opt.lowHpThreshold !== undefined ? opt.lowHpThreshold : 6) ? 1200 : 500)));
     var standoffOut = opt.standoffOut || standoff * 1.45;
     var panic = panicking(world, dom, standoff, standoffOut, opt);
     // 终局：BOSS 在场时接管。'clear' = 还有别的敌人要打，'duel' = 只剩 BOSS，去决战。
